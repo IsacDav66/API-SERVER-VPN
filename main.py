@@ -31,10 +31,10 @@ class Room(BaseModel):
     participants: List[str]
 
 
-# Ruta: Registrar usuario
+# Ruta: Registrar usuario (detectando IP automáticamente)
 @app.post("/register")
 async def register_user(user: User, request: Request):
-    client_ip = request.client.host
+    client_ip = request.client.host  # Detectar IP automáticamente
     user_id = str(uuid4())  # Generar un ID único para el usuario
     users[user_id] = {"username": user.username, "ip": client_ip}
     return {"user_id": user_id, "username": user.username, "ip": client_ip}
@@ -45,6 +45,12 @@ async def register_user(user: User, request: Request):
 async def create_room(user_id: str):
     if user_id not in users:
         return {"error": "Usuario no registrado"}
+    
+    # Verificar si el usuario ya tiene una sala activa
+    for room_id, room in rooms.items():
+        if room["host_id"] == user_id:
+            return {"error": "El usuario ya tiene una sala activa", "room_id": room_id}
+    
     room_id = str(uuid4())
     rooms[room_id] = {
         "host_id": user_id,
@@ -60,6 +66,7 @@ async def join_room(room_id: str, user_id: str):
         return {"error": "Sala no encontrada"}
     if user_id not in users:
         return {"error": "Usuario no registrado"}
+    
     rooms[room_id]["participants"].append(user_id)
     return {"room_id": room_id, "participants": rooms[room_id]["participants"]}
 
