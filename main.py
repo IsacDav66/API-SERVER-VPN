@@ -40,22 +40,21 @@ async def register_user(user: User, request: Request):
     return {"user_id": user_id, "username": user.username, "ip": client_ip}
 
 
-# Ruta: Crear sala
+# Modelos
+class CreateRoomRequest(BaseModel):
+    user_id: str
+
 @app.post("/create-room")
-async def create_room(user_id: str):
+async def create_room(create_request: CreateRoomRequest):
+    user_id = create_request.user_id
     if user_id not in users:
-        return {"error": "Usuario no registrado"}
-    
-    # Verificar si el usuario ya tiene una sala activa
-    for room_id, room in rooms.items():
-        if room["host_id"] == user_id:
-            return {"error": "El usuario ya tiene una sala activa", "room_id": room_id}
-    
+            return {"error": "Usuario no registrado"}
+        
     room_id = str(uuid4())
     rooms[room_id] = {
-        "host_id": user_id,
-        "participants": [user_id],
-    }
+            "host_id": user_id,
+            "participants": [user_id],
+        }
     return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"]}
 
 
