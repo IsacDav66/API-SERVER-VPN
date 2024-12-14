@@ -1,37 +1,78 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
-from typing import Dict
+from typing import Dict, List
+from uuid import uuid4
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Permitir CORS desde cualquier origen (ajusta según sea necesario)
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Cambia "*" por la URL de tu cliente Flutter si quieres permitir solo uno específico
+    allow_origins=["*"],  # Cambiar según sea necesario
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Base de datos en memoria (puedes usar una base de datos real más adelante)
-nodes = {}
+# Estructuras en memoria (reemplazables por una base de datos)
+users = {}  # Almacena usuarios registrados
+rooms = {}  # Almacena salas activas
 
-# Modelo para la información de los nodos
-class Node(BaseModel):
-    node_id: str
-    ip: str
-    port: int
 
-# Ruta para registrar un nodo
-# Ruta para registrar un nodo
+# Modelos
+class User(BaseModel):
+    username: str
+
+
+class Room(BaseModel):
+    room_id: str
+    host_id: str
+    participants: List[str]
+
+
+# Ruta: Registrar usuario
 @app.post("/register")
-async def register_node(node: Node):
-    nodes[node.node_id] = {"ip": node.ip, "port": node.port}
-    return {"message": "Node registered", "nodes": nodes}
+async def register_user(user: User, request: Request):
+    client_ip = request.client.host
+    user_id = str(uuid4())  # Generar un ID único para el usuario
+    users[user_id] = {"username": user.username, "ip": client_ip}
+    return {"user_id": user_id, "username": user.username, "ip": client_ip}
 
-# Ruta para obtener los nodos registrados
-@app.get("/nodes")
-async def get_nodes():
-    # Genera la respuesta para que cada nodo tenga un 'node_id'
-    return [{"node_id": node_id, "ip": node["ip"], "port": node["port"]} for node_id, node in nodes.items()]
+
+# Ruta: Crear sala
+@app.post("/create-room")
+async def create_room(user_id: str):
+    if user_id not in users:
+        return {"error": "Usuario no registrado"}
+    room_id = str(uuid4())
+    rooms[room_id] = {
+        "host_id": user_id,
+        "participants": [user_id],
+    }
+    return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"]}
+
+
+# Ruta: Unirse a sala
+@app.post("/join-room")
+async def join_room(room_id: str, user_id: str):
+    if room_id not in rooms:
+        return {"error": "Sala no encontrada"}
+    if user_id not in users:
+        return {"error": "Usuario no registrado"}
+    rooms[room_id]["participants"].append(user_id)
+    return {"room_id": room_id, "participants": rooms[room_id]["participants"]}
+
+
+# Ruta: Consultar salas activas
+@app.get("/rooms")
+async def get_rooms():
+    return [{"room_id": room_id, "participants": len(data["participants"])} for room_id, data in rooms.items()]
+
+
+# Ruta: Consultar participantes de una sala
+@app.get("/rooms/{room_id}")
+async def get_room_details(room_id: str):
+    if room_id not in rooms:
+        return {"error": "Sala no encontrada"}
+    return {"participants": [users[uid] for uid in rooms[room_id]["participants"]]}
