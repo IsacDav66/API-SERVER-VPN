@@ -58,11 +58,11 @@ async def create_room(create_request: CreateRoomRequest):
     return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"]}
 
 
-# Crear un modelo para la solicitud
+# Crear un modelo para la solicitud de unirse a una sala
 class JoinRoomRequest(BaseModel):
     room_id: str
     user_id: str
-#Ruta: unirse a una sala
+
 @app.post("/join-room")
 async def join_room(request: JoinRoomRequest):
     room_id = request.room_id
@@ -75,6 +75,34 @@ async def join_room(request: JoinRoomRequest):
     
     rooms[room_id]["participants"].append(user_id)
     return {"room_id": room_id, "participants": rooms[room_id]["participants"]}
+
+
+# Crear un modelo para la solicitud de salir de una sala
+class LeaveRoomRequest(BaseModel):
+    room_id: str
+    user_id: str
+
+@app.post("/leave-room")
+async def leave_room(request: LeaveRoomRequest):
+    room_id = request.room_id
+    user_id = request.user_id
+    
+    if room_id not in rooms:
+        return {"error": "Sala no encontrada"}
+    if user_id not in users:
+        return {"error": "Usuario no registrado"}
+    if user_id not in rooms[room_id]["participants"]:
+        return {"error": "El usuario no está en esta sala"}
+    
+    rooms[room_id]["participants"].remove(user_id)  # Eliminar al usuario de la sala
+    
+    # Si la sala se queda sin participantes, podemos eliminar la sala
+    if not rooms[room_id]["participants"]:
+        del rooms[room_id]
+    
+    return {"room_id": room_id, "participants": rooms[room_id]["participants"] if room_id in rooms else []}
+
+
 # Ruta: Consultar salas activas
 @app.get("/rooms")
 async def get_rooms():
