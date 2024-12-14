@@ -1,8 +1,10 @@
+import subprocess
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from typing import Dict, List
 from uuid import uuid4
 from fastapi.middleware.cors import CORSMiddleware
+import pyroute2
 
 app = FastAPI()
 
@@ -48,14 +50,30 @@ class CreateRoomRequest(BaseModel):
 async def create_room(create_request: CreateRoomRequest):
     user_id = create_request.user_id
     if user_id not in users:
-            return {"error": "Usuario no registrado"}
+        return {"error": "Usuario no registrado"}
         
     room_id = str(uuid4())
+
+    # Crear la subred privada para la sala
+    room_subnet = f"10.{(int(room_id[:8], 16) % 255)}.0.0/24"  # Subred única basada en la ID de la sala
+    
+    # Crear la red privada (esto es un ejemplo, en un servidor real deberías configurar el TUN/TAP)
+    # Asegúrate de tener privilegios para ejecutar esto, ya que este comando crea interfaces de red
+    try:
+        subprocess.run(["sudo", "ip", "link", "add", "name", f"vpn_{room_id}", "type", "bridge"], check=True)
+        subprocess.run(["sudo", "ip", "addr", "add", f"{room_subnet} dev vpn_{room_id}"], check=True)
+        subprocess.run(["sudo", "ip", "link", "set", "dev", f"vpn_{room_id}", "up"], check=True)
+    except subprocess.CalledProcessError as e:
+        return {"error": f"No se pudo crear la red privada: {str(e)}"}
+
     rooms[room_id] = {
-            "host_id": user_id,
-            "participants": [user_id],
-        }
-    return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"]}
+        "host_id": user_id,
+        "participants": [user_id],
+        "subnet": room_subnet,  # Guardar la subred para referencia
+        "vpn_interface": f"vpn_{room_id}",  # Guardar el nombre de la interfaz virtual
+    }
+
+    return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"], "subnet": room_subnet}
 
 
 # Crear un modelo para la solicitud de unirse a una sala
@@ -78,8 +96,12 @@ async def join_room(request: JoinRoomRequest):
         return {"error": "Ya estás en esta sala"}
     
     rooms[room_id]["participants"].append(user_id)
-    return {"room_id": room_id, "participants": rooms[room_id]["participants"]}
+    
+    # Aquí, necesitarías proporcionar al usuario los detalles para conectar a la VPN
+    # Este podría ser un archivo de configuración de OpenVPN, o parámetros para conectar a la red
+    # como la IP del servidor y la interfaz VPN
 
+    return {"room_id": room_id, "participants": rooms[room_id]["participants"], "subnet": rooms[room_id]["subnet"]}
 
 
 # Crear un modelo para la solicitud de salir de una sala
