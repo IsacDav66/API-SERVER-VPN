@@ -73,8 +73,13 @@ async def join_room(request: JoinRoomRequest):
     if user_id not in users:
         return {"error": "Usuario no registrado"}
     
+    # Verificar si el usuario ya está en la sala
+    if user_id in rooms[room_id]["participants"]:
+        return {"error": "Ya estás en esta sala"}
+    
     rooms[room_id]["participants"].append(user_id)
     return {"room_id": room_id, "participants": rooms[room_id]["participants"]}
+
 
 
 # Crear un modelo para la solicitud de salir de una sala
