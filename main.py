@@ -58,9 +58,16 @@ async def create_room(create_request: CreateRoomRequest):
     return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"]}
 
 
-# Ruta: Unirse a sala
+# Crear un modelo para la solicitud
+class JoinRoomRequest(BaseModel):
+    room_id: str
+    user_id: str
+#Ruta: unirse a una sala
 @app.post("/join-room")
-async def join_room(room_id: str, user_id: str):
+async def join_room(request: JoinRoomRequest):
+    room_id = request.room_id
+    user_id = request.user_id
+    
     if room_id not in rooms:
         return {"error": "Sala no encontrada"}
     if user_id not in users:
@@ -68,8 +75,6 @@ async def join_room(room_id: str, user_id: str):
     
     rooms[room_id]["participants"].append(user_id)
     return {"room_id": room_id, "participants": rooms[room_id]["participants"]}
-
-
 # Ruta: Consultar salas activas
 @app.get("/rooms")
 async def get_rooms():
