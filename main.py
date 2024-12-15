@@ -1,10 +1,10 @@
-import subprocess
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from typing import Dict, List
 from uuid import uuid4
 from fastapi.middleware.cors import CORSMiddleware
-import pyroute2
+import subprocess
+import os
 
 app = FastAPI()
 
@@ -42,7 +42,7 @@ async def register_user(user: User, request: Request):
     return {"user_id": user_id, "username": user.username, "ip": client_ip}
 
 
-# Modelos
+# Ruta: Crear una sala
 class CreateRoomRequest(BaseModel):
     user_id: str
 
@@ -50,33 +50,60 @@ class CreateRoomRequest(BaseModel):
 async def create_room(create_request: CreateRoomRequest):
     user_id = create_request.user_id
     if user_id not in users:
-        return {"error": "Usuario no registrado"}
+            return {"error": "Usuario no registrado"}
         
     room_id = str(uuid4())
-
-    # Crear la subred privada para la sala
-    room_subnet = f"10.{(int(room_id[:8], 16) % 255)}.0.0/24"  # Subred única basada en la ID de la sala
-    
-    # Crear la red privada (esto es un ejemplo, en un servidor real deberías configurar el TUN/TAP)
-    # Asegúrate de tener privilegios para ejecutar esto, ya que este comando crea interfaces de red
-    try:
-        subprocess.run(["sudo", "ip", "link", "add", "name", f"vpn_{room_id}", "type", "bridge"], check=True)
-        subprocess.run(["sudo", "ip", "addr", "add", f"{room_subnet} dev vpn_{room_id}"], check=True)
-        subprocess.run(["sudo", "ip", "link", "set", "dev", f"vpn_{room_id}", "up"], check=True)
-    except subprocess.CalledProcessError as e:
-        return {"error": f"No se pudo crear la red privada: {str(e)}"}
-
     rooms[room_id] = {
-        "host_id": user_id,
-        "participants": [user_id],
-        "subnet": room_subnet,  # Guardar la subred para referencia
-        "vpn_interface": f"vpn_{room_id}",  # Guardar el nombre de la interfaz virtual
-    }
+            "host_id": user_id,
+            "participants": [user_id],
+        }
+    
+    # Llamar a OpenVPN para crear una red virtual
+    try:
+        create_virtual_network(room_id)
+        return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"]}
+    except Exception as e:
+        return {"error": f"Error al crear la red virtual: {str(e)}"}
 
-    return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"], "subnet": room_subnet}
+
+# Función para crear una red virtual usando OpenVPN
+def create_virtual_network(room_id: str):
+    # Crear una carpeta para la configuración de OpenVPN de esta sala
+    config_dir = f"/etc/openvpn/rooms/{room_id}"
+    os.makedirs(config_dir, exist_ok=True)
+    
+    # Configuración básica de OpenVPN, deberás ajustarla a tu implementación
+    config_file = os.path.join(config_dir, "server.conf")
+    
+    with open(config_file, "w") as f:
+        f.write(f"""
+dev tun
+proto udp
+port 1194
+ca ca.crt
+cert server.crt
+key server.key
+dh dh2048.pem
+server 10.8.0.0 255.255.255.0
+ifconfig-pool-persist ipp.txt
+push "redirect-gateway def1 bypass-dhcp"
+push "dhcp-option DNS 8.8.8.8"
+keepalive 10 120
+comp-lzo
+user nobody
+group nobody
+persist-key
+persist-tun
+status openvpn-status.log
+log-append /var/log/openvpn.log
+verb 3
+    """)
+    
+    # Reiniciar el servicio de OpenVPN para aplicar la configuración (esto puede variar según tu servidor)
+    subprocess.run(["systemctl", "restart", "openvpn@server"], check=True)
 
 
-# Crear un modelo para la solicitud de unirse a una sala
+# Ruta: Unirse a una sala
 class JoinRoomRequest(BaseModel):
     room_id: str
     user_id: str
@@ -97,14 +124,60 @@ async def join_room(request: JoinRoomRequest):
     
     rooms[room_id]["participants"].append(user_id)
     
-    # Aquí, necesitarías proporcionar al usuario los detalles para conectar a la VPN
-    # Este podría ser un archivo de configuración de OpenVPN, o parámetros para conectar a la red
-    # como la IP del servidor y la interfaz VPN
+    # Llamar a OpenVPN para conectar al usuario a la red virtual
+    try:
+        connect_to_virtual_network(room_id, user_id)
+        return {"room_id": room_id, "participants": rooms[room_id]["participants"]}
+    except Exception as e:
+        return {"error": f"Error al conectar a la red virtual: {str(e)}"}
 
-    return {"room_id": room_id, "participants": rooms[room_id]["participants"], "subnet": rooms[room_id]["subnet"]}
+
+# Función para conectar al usuario a la red virtual usando OpenVPN
+def connect_to_virtual_network(room_id: str, user_id: str):
+    # Aquí se deberían generar los archivos de configuración necesarios para que el usuario se conecte a la VPN
+    user_config_dir = f"/etc/openvpn/rooms/{room_id}/{user_id}"
+    os.makedirs(user_config_dir, exist_ok=True)
+    
+    # Crear el archivo de configuración para el cliente OpenVPN (esto puede variar)
+    config_file = os.path.join(user_config_dir, "client.ovpn")
+    
+    with open(config_file, "w") as f:
+        f.write(f"""
+client
+dev tun
+proto udp
+remote your-server-ip 1194
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+ca ca.crt
+cert {user_id}-cert.crt
+key {user_id}-key.key
+remote-cert-tls server
+comp-lzo
+verb 3
+    """)
+    
+    # Aquí podrías usar un comando de OpenVPN o una API que ejecute el cliente OpenVPN
+    # subprocess.run(["openvpn", "--config", config_file], check=True)
 
 
-# Crear un modelo para la solicitud de salir de una sala
+# Ruta: Consultar salas activas
+@app.get("/rooms")
+async def get_rooms():
+    return [{"room_id": room_id, "participants": len(data["participants"])} for room_id, data in rooms.items()]
+
+
+# Ruta: Consultar participantes de una sala
+@app.get("/rooms/{room_id}")
+async def get_room_details(room_id: str):
+    if room_id not in rooms:
+        return {"error": "Sala no encontrada"}
+    return {"participants": [users[uid] for uid in rooms[room_id]["participants"]]}
+
+
+# Ruta: Salir de una sala
 class LeaveRoomRequest(BaseModel):
     room_id: str
     user_id: str
@@ -127,18 +200,17 @@ async def leave_room(request: LeaveRoomRequest):
     if not rooms[room_id]["participants"]:
         del rooms[room_id]
     
-    return {"room_id": room_id, "participants": rooms[room_id]["participants"] if room_id in rooms else []}
+    # Llamar a OpenVPN para desconectar al usuario de la red virtual
+    try:
+        disconnect_from_virtual_network(room_id, user_id)
+        return {"room_id": room_id, "participants": rooms[room_id]["participants"] if room_id in rooms else []}
+    except Exception as e:
+        return {"error": f"Error al desconectar de la red virtual: {str(e)}"}
 
 
-# Ruta: Consultar salas activas
-@app.get("/rooms")
-async def get_rooms():
-    return [{"room_id": room_id, "participants": len(data["participants"])} for room_id, data in rooms.items()]
-
-
-# Ruta: Consultar participantes de una sala
-@app.get("/rooms/{room_id}")
-async def get_room_details(room_id: str):
-    if room_id not in rooms:
-        return {"error": "Sala no encontrada"}
-    return {"participants": [users[uid] for uid in rooms[room_id]["participants"]]}
+# Función para desconectar al usuario de la red virtual usando OpenVPN
+def disconnect_from_virtual_network(room_id: str, user_id: str):
+    user_config_dir = f"/etc/openvpn/rooms/{room_id}/{user_id}"
+    
+    # Aquí podrías ejecutar un comando para desconectar al usuario de OpenVPN
+    subprocess.run(["openvpn", "--config", os.path.join(user_config_dir, "client.ovpn"), "--disconnect"], check=True)
