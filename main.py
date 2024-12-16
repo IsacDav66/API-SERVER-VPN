@@ -155,7 +155,7 @@ async def get_client_config(room_id: str, user_id: str):
 client
 dev tun
 proto udp
-remote tu-ip-servidor-ec2 1194  # Cambia por la IP publica de tu EC2
+remote 18.119.122.250 1194  # Cambia por la IP publica de tu EC2
 resolv-retry infinite
 nobind
 persist-key
