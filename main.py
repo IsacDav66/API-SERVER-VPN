@@ -67,7 +67,6 @@ async def create_room(create_request: CreateRoomRequest):
     
     # Llamar a OpenVPN para crear una red virtual
     try:
-      
         create_virtual_network(room_id)
         return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"]}
     except Exception as e:
@@ -104,15 +103,6 @@ status openvpn-status.log
 log-append /var/log/openvpn.log
 verb 3
         """)
-    
-    if platform.system() == "Linux":
-        try:
-            subprocess.run(["systemctl", "restart", "openvpn@server"], check=True, capture_output=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Error en la ejecución de OpenVPN: {e.stderr.decode()}")
-            raise
-    else:
-      print("Sistema Operativo no soportado para restart de OpenVPN")
 
 
 # Ruta: Unirse a una sala
