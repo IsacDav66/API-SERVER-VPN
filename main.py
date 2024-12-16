@@ -29,7 +29,7 @@ app.add_middleware(
 users = {}  # Almacena usuarios registrados
 rooms = {}  # Almacena salas activas
 # Directorio de configuraciones OpenVPN
-OPEN_VPN_DIR = "/etc/openvpn/rooms"
+OPEN_VPN_DIR = os.environ.get("OPEN_VPN_DIR", "/tmp/openvpn_rooms")
 
 # Modelos
 class User(BaseModel):
@@ -58,7 +58,7 @@ async def create_room(create_request: CreateRoomRequest):
     user_id = create_request.user_id
     if user_id not in users:
             return {"error": "Usuario no registrado"}
-        
+    
     room_id = str(uuid4())
     rooms[room_id] = {
             "host_id": user_id,
@@ -67,6 +67,7 @@ async def create_room(create_request: CreateRoomRequest):
     
     # Llamar a OpenVPN para crear una red virtual
     try:
+      
         create_virtual_network(room_id)
         return {"room_id": room_id, "host": users[user_id], "participants": rooms[room_id]["participants"]}
     except Exception as e:
@@ -75,6 +76,8 @@ async def create_room(create_request: CreateRoomRequest):
 
 # Función para crear una red virtual usando OpenVPN
 def create_virtual_network(room_id: str):
+    
+    os.makedirs(OPEN_VPN_DIR, exist_ok=True)
     config_dir = os.path.join(OPEN_VPN_DIR, room_id)
     os.makedirs(config_dir, exist_ok=True)
     
@@ -101,7 +104,6 @@ status openvpn-status.log
 log-append /var/log/openvpn.log
 verb 3
         """)
-    
     
     if platform.system() == "Linux":
         try:
