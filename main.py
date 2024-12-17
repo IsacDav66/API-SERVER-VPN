@@ -128,8 +128,8 @@ async def join_room(request: JoinRoomRequest):
     
     # Llamar a OpenVPN para conectar al usuario a la red virtual
     try:
-      ovpn_config = await get_client_config(room_id, user_id)
-      return {"room_id": room_id, "participants": rooms[room_id]["participants"], "ovpn_config": ovpn_config}
+        config = await get_client_config(room_id, user_id)
+        return {"room_id": room_id, "participants": rooms[room_id]["participants"], "ovpn_config": config["ovpn_config"], "cert_path": config["cert_path"], "key_path": config["key_path"]}
 
     except Exception as e:
         return {"error": f"Error al conectar a la red virtual: {str(e)}"}
@@ -140,6 +140,8 @@ async def get_client_config(room_id: str, user_id: str):
     user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
     os.makedirs(user_config_dir, exist_ok=True)
     config_file = os.path.join(user_config_dir, "client.ovpn")
+    cert_file = os.path.join(user_config_dir, f"{user_id}-cert.crt")
+    key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
     with open(config_file, "w") as f:
        f.write(f"""
 client
@@ -158,11 +160,19 @@ comp-lzo
 verb 3
     """)
     
+    # Genera un certificado ficticio
+    with open(cert_file, 'w') as f:
+      f.write(f"ESTO ES UN CERTIFICADO DE PRUEBA")
+    # Genera una clave ficticia
+    with open(key_file, 'w') as f:
+      f.write(f"ESTO ES UNA CLAVE PRIVADA DE PRUEBA")
+    
+
     #  Lee el contenido del archivo config, y lo devuelve al frontend.
     with open(config_file, 'r') as f:
         config_content = f.read()
     
-    return config_content
+    return {"ovpn_config":config_content,"cert_path":cert_file, "key_path":key_file}
 
 # Ruta: Consultar salas activas
 @app.get("/rooms")
