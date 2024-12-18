@@ -152,7 +152,7 @@ def generate_client_certs(room_id, user_id):
 default_ca = CA_default
 
 [ CA_default ]
-dir               = {user_config_dir}
+dir               = .
 certs             = $dir
 crl_dir           = $dir
 database          = $dir/index.txt
@@ -232,7 +232,6 @@ emailAddress            = optional
             key_content = f.read()
 
         return {"cert_content":cert_content, "key_content":key_content}
-
 
 # Función para obtener la configuración del cliente OpenVPN
 async def get_client_config(room_id: str, user_id: str):
