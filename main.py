@@ -147,10 +147,7 @@ def generate_client_certs(room_id, user_id):
         ca_key_path = os.path.join(OPEN_VPN_DIR,"./demoCA/private/cakey.pem")
         #  Creamos un archivo de configuracion temporal de openssl.
         with NamedTemporaryFile(mode="w", delete=False) as conf_file:
-            conf_file.write(f"""
-certificate       = {ca_path}
-serial            = {user_config_dir}/serial
-crlnumber         = /dev/null
+            conf_file.write("""
 default_days      = 3650
 default_md        = sha256
 policy            = policy_anything
@@ -188,20 +185,23 @@ emailAddress            = optional
                 subprocess.run(
                     [
                         "openssl",
-                        "ca",
-                        "-config",
-                        conf_file_path,
-                        "-keyfile",
-                        ca_key_path,  #  Especificamos la ruta de la clave de la CA
-                        "-cert",
-                        ca_path, #  Especificamos la ruta del certificado de la CA
+                        "x509",
+                        "-req",
                         "-in",
                         f"{user_id}.csr",
+                        "-CA",
+                        ca_path,
+                        "-CAkey",
+                        ca_key_path,
                         "-out",
                         cert_file,
                         "-days",
                         "3650",
-                        "-batch" # para no tener que darle a "Y" todo el rato.
+                        "-sha256",
+                        "-extfile",
+                        conf_file_path,
+                        "-CAcreateserial",
+                         "-batch" # para no tener que darle a "Y" todo el rato.
                     ],
                     cwd = user_config_dir,
                     check=True,
