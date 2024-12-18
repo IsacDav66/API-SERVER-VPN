@@ -149,7 +149,7 @@ def generate_client_certs(room_id, user_id):
         with NamedTemporaryFile(mode="w", delete=False) as conf_file:
             conf_file.write(f"""
 [ ca ]
-default_ca = CA_default
+default_ca = 
 
 [ CA_default ]
 dir               = .
