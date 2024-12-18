@@ -148,8 +148,6 @@ def generate_client_certs(room_id, user_id):
         #  Creamos un archivo de configuracion temporal de openssl.
         with NamedTemporaryFile(mode="w", delete=False) as conf_file:
             conf_file.write(f"""
-[ ca ]
-
 [ CA_default ]
 dir               = .
 certs             = $dir
