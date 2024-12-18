@@ -148,16 +148,9 @@ def generate_client_certs(room_id, user_id):
         #  Creamos un archivo de configuracion temporal de openssl.
         with NamedTemporaryFile(mode="w", delete=False) as conf_file:
             conf_file.write(f"""
-[ CA_default ]
-dir               = .
-certs             = $dir
-crl_dir           = $dir
-database          = $dir/index.txt
-new_certs_dir     = $dir
-unique_subject    = no
 certificate       = {ca_path}
 serial            = {user_config_dir}/serial
-crlnumber         = $dir/crlnumber
+crlnumber         = /dev/null
 default_days      = 3650
 default_md        = sha256
 policy            = policy_anything
