@@ -138,59 +138,69 @@ async def join_room(request: JoinRoomRequest):
 
 #  Genera los certificados para un usuario dado.
 def generate_client_certs(room_id, user_id):
-    user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
-    os.makedirs(user_config_dir, exist_ok=True)
-    cert_file = os.path.join(user_config_dir, f"{user_id}-cert.crt")
-    key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
-    try:
-        # Ejecutar comandos OpenSSL para generar certificado y clave del cliente
-        subprocess.run(
-            [
-                "openssl",
-                "req",
-                "-new",
-                "-newkey",
-                "rsa:2048",
-                "-nodes",
-                "-keyout",
-                key_file,
-                "-out",
-                f"{user_id}.csr", #  Se genera un .csr, pero lo borramos justo despues
-                "-subj",
-                f"/CN={user_id}",
-            ],
-            cwd = user_config_dir,
-            check=True,
-        )
-        subprocess.run(
-            [
-                "openssl",
-                "ca",
-                "-in",
-                f"{user_id}.csr",
-                "-out",
-                cert_file,
-                "-days",
-                "3650",
-                 "-batch" # para no tener que darle a "Y" todo el rato.
-            ],
-            cwd = user_config_dir,
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        raise Exception(f"Error al generar certificados: {e}")
-    finally:
-        #  Borrar el csr porque no nos hace falta.
-        csr_file = os.path.join(user_config_dir, f"{user_id}.csr")
-        if os.path.exists(csr_file):
-                os.remove(csr_file)
+        user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
+        os.makedirs(user_config_dir, exist_ok=True)
+        cert_file = os.path.join(user_config_dir, f"{user_id}-cert.crt")
+        key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
+        #  Obtenemos la ruta del ca.crt
+        ca_path = os.path.join(OPEN_VPN_DIR,"ca.crt")
+        ca_key_path = os.path.join(OPEN_VPN_DIR,"./demoCA/private/cakey.pem")
 
-    with open(cert_file, 'r') as f:
-        cert_content = f.read()
-    with open(key_file, 'r') as f:
-        key_content = f.read()
+        try:
+            # Ejecutar comandos OpenSSL para generar certificado y clave del cliente
+            subprocess.run(
+                [
+                    "openssl",
+                    "req",
+                    "-new",
+                    "-newkey",
+                    "rsa:2048",
+                    "-nodes",
+                    "-keyout",
+                    key_file,
+                    "-out",
+                    f"{user_id}.csr", #  Se genera un .csr, pero lo borramos justo despues
+                    "-subj",
+                    f"/CN={user_id}",
+                ],
+                cwd = user_config_dir,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "openssl",
+                    "ca",
+                     "-config",
+                    "/usr/lib/ssl/openssl.cnf", # Especificamos la ruta del archivo de configuracion de openssl.
+                    "-keyfile",
+                    ca_key_path,  #  Especificamos la ruta de la clave de la CA
+                    "-cert",
+                    ca_path, #  Especificamos la ruta del certificado de la CA
+                    "-in",
+                    f"{user_id}.csr",
+                    "-out",
+                    cert_file,
+                    "-days",
+                    "3650",
+                    "-batch" # para no tener que darle a "Y" todo el rato.
+                ],
+                cwd = user_config_dir,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"Error al generar certificados: {e}")
+        finally:
+            #  Borrar el csr porque no nos hace falta.
+            csr_file = os.path.join(user_config_dir, f"{user_id}.csr")
+            if os.path.exists(csr_file):
+                    os.remove(csr_file)
 
-    return {"cert_content":cert_content, "key_content":key_content}
+        with open(cert_file, 'r') as f:
+            cert_content = f.read()
+        with open(key_file, 'r') as f:
+            key_content = f.read()
+
+        return {"cert_content":cert_content, "key_content":key_content}
 
 
 # Función para obtener la configuración del cliente OpenVPN
