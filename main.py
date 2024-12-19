@@ -146,15 +146,17 @@ def generate_client_certs(room_id, user_id):
         #  Obtenemos la ruta del ca.crt
         ca_path = os.path.join(OPEN_VPN_DIR,"ca.crt")
         ca_key_path = os.path.join(OPEN_VPN_DIR,"./demoCA/private/cakey.pem")
+        new_certs_dir = os.path.join(user_config_dir,"newcerts") # Ruta real para new_certs_dir
+        os.makedirs(new_certs_dir, exist_ok = True)
         #  Creamos un archivo de configuracion temporal de openssl.
         with NamedTemporaryFile(mode="w", delete=False) as conf_file:
-             conf_file.write("""
-[ ca ]
-default_ca = CA_default
+            conf_file.write(f"""
 [ CA_default ]
-certificate     = ca.crt
-private_key     = cakey.pem
+new_certs_dir     = {new_certs_dir}
+certificate       = {ca_path}
+private_key       = {ca_key_path}
 policy            = policy_anything
+
 [ policy_anything ]
 countryName             = optional
 stateOrProvinceName     = optional
@@ -164,10 +166,9 @@ organizationalUnitName  = optional
 commonName              = supplied
 emailAddress            = optional
 """)
-        conf_file_path = conf_file.name
-
-        try:
-                 # Ejecutar comandos OpenSSL para generar certificado y clave del cliente
+            conf_file_path = conf_file.name
+            try:
+                # Ejecutar comandos OpenSSL para generar certificado y clave del cliente
                 subprocess.run(
                     [
                         "openssl",
@@ -202,18 +203,18 @@ emailAddress            = optional
                         cert_file,
                         "-days",
                         "3650",
-                        "-batch" # para no tener que darle a "Y" todo el rato.
+                         "-batch" # para no tener que darle a "Y" todo el rato.
                     ],
                     cwd = user_config_dir,
                     check=True,
                 )
-        except subprocess.CalledProcessError as e:
+            except subprocess.CalledProcessError as e:
                 raise Exception(f"Error al generar certificados: {e}")
-        finally:
-                 #  Borrar el csr porque no nos hace falta.
+            finally:
+                #  Borrar el csr porque no nos hace falta.
                 csr_file = os.path.join(user_config_dir, f"{user_id}.csr")
                 if os.path.exists(csr_file):
-                    os.remove(csr_file)
+                        os.remove(csr_file)
                  # Eliminar el archivo de configuración temporal.
                 os.remove(conf_file_path)
 
