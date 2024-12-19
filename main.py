@@ -115,22 +115,22 @@ class JoinRoomRequest(BaseModel):
 async def join_room(request: JoinRoomRequest):
     room_id = request.room_id
     user_id = request.user_id
-    
+
     if room_id not in rooms:
         return {"error": "Sala no encontrada"}
     if user_id not in users:
         return {"error": "Usuario no registrado"}
-    
+
     # Verificar si el usuario ya está en la sala
     if user_id in rooms[room_id]["participants"]:
         return {"error": "Ya estás en esta sala"}
-    
+
     rooms[room_id]["participants"].append(user_id)
-    
+
     # Llamar a OpenVPN para conectar al usuario a la red virtual
     try:
         config = await get_client_config(room_id, user_id)
-        return {"room_id": room_id, "participants": rooms[room_id]["participants"], "ovpn_config": config["ovpn_config"], "cert_content": config["cert_content"], "key_content": config["key_content"]}
+        return {"room_id": room_id, "participants": rooms[room_id]["participants"], "ovpn_config": config["ovpn_config"]}
 
     except Exception as e:
         return {"error": f"Error al conectar a la red virtual: {str(e)}"}
@@ -138,116 +138,99 @@ async def join_room(request: JoinRoomRequest):
 
 #  Genera los certificados para un usuario dado.
 def generate_client_certs(room_id, user_id):
-        user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
-        os.makedirs(user_config_dir, exist_ok=True)
-        cert_file = os.path.join(user_config_dir, f"{user_id}-cert.crt")
-        key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
-        #  Obtenemos la ruta del ca.crt
-        ca_path = os.path.join(OPEN_VPN_DIR,"ca.crt")
-        ca_key_path = os.path.join(OPEN_VPN_DIR,"./demoCA/private/cakey.pem")
-        #  Creamos un archivo de configuracion temporal de openssl.
-        with NamedTemporaryFile(mode="w", delete=False) as conf_file:
-            conf_file.write(f"""
-default_days      = 3650
-default_md        = sha256
-policy            = policy_anything
+     user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
+     os.makedirs(user_config_dir, exist_ok=True)
+     cert_file = os.path.join(user_config_dir, f"{user_id}-cert.crt")
+     key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
+     #  Obtenemos la ruta del ca.crt
+     ca_path = os.path.join(OPEN_VPN_DIR,"ca.crt")
+     ca_key_path = os.path.join(OPEN_VPN_DIR,"./demoCA/private/cakey.pem")
+     try:
+         # Ejecutar comandos OpenSSL para generar certificado y clave del cliente
+         subprocess.run(
+             [
+                 "openssl",
+                 "req",
+                 "-new",
+                 "-newkey",
+                 "rsa:2048",
+                 "-nodes",
+                 "-keyout",
+                 key_file,
+                 "-out",
+                 f"{user_id}.csr", #  Se genera un .csr, pero lo borramos justo despues
+                 "-subj",
+                 f"/CN={user_id}",
+             ],
+             cwd = user_config_dir,
+             check=True,
+         )
+          # Usamos la clave de la CA para generar directamente el certificado del usuario.
+         subprocess.run(
+             [
+                "openssl",
+                 "x509",
+                  "-signkey",
+                  ca_key_path,
+                  "-in",
+                 f"{user_id}.csr",
+                 "-out",
+                 cert_file,
+                 "-days",
+                 "3650",
+                  "-batch" # para no tener que darle a "Y" todo el rato.
+             ],
+              cwd = user_config_dir,
+             check=True,
+         )
+     except subprocess.CalledProcessError as e:
+         raise Exception(f"Error al generar certificados: {e}")
+     finally:
+         #  Borrar el csr porque no nos hace falta.
+         csr_file = os.path.join(user_config_dir, f"{user_id}.csr")
+         if os.path.exists(csr_file):
+                 os.remove(csr_file)
 
-[ policy_anything ]
-countryName             = optional
-stateOrProvinceName     = optional
-localityName            = optional
-organizationName        = optional
-organizationalUnitName  = optional
-commonName              = supplied
-emailAddress            = optional
-""")
-            conf_file_path = conf_file.name
-            try:
-                # Ejecutar comandos OpenSSL para generar certificado y clave del cliente
-                subprocess.run(
-                    [
-                        "openssl",
-                        "req",
-                        "-new",
-                        "-newkey",
-                        "rsa:2048",
-                        "-nodes",
-                        "-keyout",
-                        key_file,
-                        "-out",
-                        f"{user_id}.csr", #  Se genera un .csr, pero lo borramos justo despues
-                        "-subj",
-                        f"/CN={user_id}",
-                    ],
-                    cwd = user_config_dir,
-                    check=True,
-                )
-                subprocess.run(
-                    [
-                        "openssl",
-                        "x509",
-                        "-req",
-                        "-in",
-                        f"{user_id}.csr",
-                        "-CA",
-                        ca_path,
-                        "-CAkey",
-                        ca_key_path,
-                        "-out",
-                        cert_file,
-                        "-days",
-                        "3650",
-                        "-extfile",
-                        conf_file_path,
-                        "-CAcreateserial",
-                        "-batch" # para no tener que darle a "Y" todo el rato.
-                    ],
-                    cwd = user_config_dir,
-                    check=True,
-                )
-            except subprocess.CalledProcessError as e:
-                raise Exception(f"Error al generar certificados: {e}")
-            finally:
-                #  Borrar el csr porque no nos hace falta.
-                csr_file = os.path.join(user_config_dir, f"{user_id}.csr")
-                if os.path.exists(csr_file):
-                        os.remove(csr_file)
-                # Eliminar el archivo de configuración temporal.
-                os.remove(conf_file_path)
+     with open(cert_file, 'r') as f:
+         cert_content = f.read()
+     with open(key_file, 'r') as f:
+         key_content = f.read()
 
-        with open(cert_file, 'r') as f:
-            cert_content = f.read()
-        with open(key_file, 'r') as f:
-            key_content = f.read()
-
-        return {"cert_content":cert_content, "key_content":key_content}
+     return {"cert_content":cert_content, "key_content":key_content}
 
 # Función para obtener la configuración del cliente OpenVPN
 async def get_client_config(room_id: str, user_id: str):
-    # ruta del archivo de configuración en el servidor
+# ruta del archivo de configuración en el servidor
     user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
     os.makedirs(user_config_dir, exist_ok=True)
     config_file = os.path.join(user_config_dir, "client.ovpn")
+    certs = generate_client_certs(room_id,user_id)
     with open(config_file, "w") as f:
         f.write(f"""
-client
-dev tun
-proto udp
-remote 18.119.122.250 1194  # Cambia por la IP publica de tu EC2
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-ca ca.crt
-remote-cert-tls server
-comp-lzo
-verb 3
+    client
+    dev tun
+    proto udp
+    remote 18.119.122.250 1194 # Cambia por la IP publica de tu EC2
+    resolv-retry infinite
+    nobind
+    persist-key
+    persist-tun
+    ca ca.crt
+    remote-cert-tls server
+    comp-lzo
+    verb 3
+    <cert>
+    {certs["cert_content"]}
+    </cert>
+    <key>
+    {certs["key_content"]}
+    </key>
     """)
-    certs = generate_client_certs(room_id,user_id)
+
     with open(config_file, 'r') as f:
         config_content = f.read()
 
-    return {"ovpn_config":config_content,"cert_content":certs["cert_content"], "key_content":certs["key_content"]}
+    return {"ovpn_config":config_content}
 
 
 # Ruta: Consultar salas activas
