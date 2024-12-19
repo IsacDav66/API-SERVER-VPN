@@ -137,63 +137,63 @@ async def join_room(request: JoinRoomRequest):
         return {"error": f"Error al conectar a la red virtual: {str(e)}"}
 
 
-# Función para generar certificados del cliente
+#  Genera los certificados para un usuario dado.
 def generate_client_certs(room_id, user_id):
-    user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
-    os.makedirs(user_config_dir, exist_ok=True)
-    cert_file = os.path.join(user_config_dir, f"{user_id}-cert.crt")
-    key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
-    ca_path = os.path.join(OPEN_VPN_DIR, "ca.crt")
-    ca_key_path = os.path.join(OPEN_VPN_DIR, "./demoCA/private/cakey.pem")
-    try:
-        subprocess.run(
-            [
-                "openssl",
-                "req",
-                "-new",
-                "-newkey",
-                "rsa:2048",
-                "-nodes",
-                "-keyout",
-                key_file,
-                "-out",
-                f"{user_id}.csr",
-                "-subj",
-                f"/CN={user_id}",
-            ],
-            cwd=user_config_dir,
-            check=True,
-        )
-        subprocess.run(
-            [
-                "openssl",
-                "x509",
-                "-signkey",
-                ca_key_path,
-                "-in",
-                f"{user_id}.csr",
-                "-out",
-                cert_file,
-                "-days",
-                "3650",
-                "-batch"
-            ],
-            cwd=user_config_dir,
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        raise Exception(f"Error al generar certificados: {e}")
-    finally:
-        csr_file = os.path.join(user_config_dir, f"{user_id}.csr")
-        if os.path.exists(csr_file):
-            os.remove(csr_file)
+        user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
+        os.makedirs(user_config_dir, exist_ok=True)
+        cert_file = os.path.join(user_config_dir, f"{user_id}-cert.crt")
+        key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
+        #  Obtenemos la ruta del ca.crt
+        ca_path = os.path.join(OPEN_VPN_DIR,"ca.crt")
+        ca_key_path = os.path.join(OPEN_VPN_DIR,"./demoCA/private/cakey.pem")
+        try:
+           #  Usamos la clave de la CA para generar directamente el certificado del usuario.
+            subprocess.run(
+                [
+                   "openssl",
+                    "req",
+                    "-new",
+                    "-newkey",
+                    "rsa:2048",
+                    "-nodes",
+                     "-keyout",
+                    key_file,
+                    "-out",
+                    cert_file, #  El certificado se genera aqui
+                    "-subj",
+                    f"/CN={user_id}",
+                     "-batch",
+                ],
+                 cwd = user_config_dir,
+                check=True,
+            )
+           #  Firmamos el certificado con la clave de la CA
+            subprocess.run(
+                [
+                     "openssl",
+                     "x509",
+                     "-signkey",
+                     ca_key_path,
+                     "-in",
+                     cert_file, # Ahora el certificado es el input
+                     "-out",
+                     cert_file, #  El certificado se reescribe aqui
+                     "-days",
+                    "3650",
+                    "-batch" # para no tener que darle a "Y" todo el rato.
+                ],
+                cwd = user_config_dir,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"Error al generar certificados: {e}")
+        
+        with open(cert_file, 'r') as f:
+            cert_content = f.read()
+        with open(key_file, 'r') as f:
+            key_content = f.read()
 
-    with open(cert_file, 'r') as f:
-        cert_content = f.read()
-    with open(key_file, 'r') as f:
-        key_content = f.read()
-
-    return {"cert_content": cert_content, "key_content": key_content}
+        return {"cert_content":cert_content, "key_content":key_content}
 
 # Función para obtener la configuración del cliente OpenVPN
 async def get_client_config(room_id: str, user_id: str):
