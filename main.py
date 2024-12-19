@@ -76,14 +76,14 @@ async def create_room(create_request: CreateRoomRequest):
 
 # Función para crear una red virtual usando OpenVPN
 def create_virtual_network(room_id: str):
-    
-    os.makedirs(OPEN_VPN_DIR, exist_ok=True)
-    config_dir = os.path.join(OPEN_VPN_DIR, room_id)
-    os.makedirs(config_dir, exist_ok=True)
-    
-    config_file = os.path.join(config_dir, "server.conf")
-    with open(config_file, "w") as f:
-        f.write(f"""dev tun
+    try:
+        os.makedirs(OPEN_VPN_DIR, exist_ok=True)
+        config_dir = os.path.join(OPEN_VPN_DIR, room_id)
+        os.makedirs(config_dir, exist_ok=True)
+
+        config_file = os.path.join(config_dir, "server.conf")
+        with open(config_file, "w") as f:
+            f.write(f"""dev tun
 proto udp
 port 1194
 ca ca.crt
@@ -103,8 +103,9 @@ persist-tun
 status openvpn-status.log
 log-append /var/log/openvpn.log
 verb 3
-        """)
-
+            """)
+    except Exception as e:
+        raise Exception(f"Error al crear la red virtual: {e}")
 
 # Ruta: Unirse a una sala
 class JoinRoomRequest(BaseModel):
@@ -136,102 +137,96 @@ async def join_room(request: JoinRoomRequest):
         return {"error": f"Error al conectar a la red virtual: {str(e)}"}
 
 
-#  Genera los certificados para un usuario dado.
+# Función para generar certificados del cliente
 def generate_client_certs(room_id, user_id):
-     user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
-     os.makedirs(user_config_dir, exist_ok=True)
-     cert_file = os.path.join(user_config_dir, f"{user_id}-cert.crt")
-     key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
-     #  Obtenemos la ruta del ca.crt
-     ca_path = os.path.join(OPEN_VPN_DIR,"ca.crt")
-     ca_key_path = os.path.join(OPEN_VPN_DIR,"./demoCA/private/cakey.pem")
-     try:
-         # Ejecutar comandos OpenSSL para generar certificado y clave del cliente
-         subprocess.run(
-             [
-                 "openssl",
-                 "req",
-                 "-new",
-                 "-newkey",
-                 "rsa:2048",
-                 "-nodes",
-                 "-keyout",
-                 key_file,
-                 "-out",
-                 f"{user_id}.csr", #  Se genera un .csr, pero lo borramos justo despues
-                 "-subj",
-                 f"/CN={user_id}",
-             ],
-             cwd = user_config_dir,
-             check=True,
-         )
-          # Usamos la clave de la CA para generar directamente el certificado del usuario.
-         subprocess.run(
-             [
+    user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
+    os.makedirs(user_config_dir, exist_ok=True)
+    cert_file = os.path.join(user_config_dir, f"{user_id}-cert.crt")
+    key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
+    ca_path = os.path.join(OPEN_VPN_DIR, "ca.crt")
+    ca_key_path = os.path.join(OPEN_VPN_DIR, "./demoCA/private/cakey.pem")
+    try:
+        subprocess.run(
+            [
                 "openssl",
-                 "x509",
-                  "-signkey",
-                  ca_key_path,
-                  "-in",
-                 f"{user_id}.csr",
-                 "-out",
-                 cert_file,
-                 "-days",
-                 "3650",
-                  "-batch" # para no tener que darle a "Y" todo el rato.
-             ],
-              cwd = user_config_dir,
-             check=True,
-         )
-     except subprocess.CalledProcessError as e:
-         raise Exception(f"Error al generar certificados: {e}")
-     finally:
-         #  Borrar el csr porque no nos hace falta.
-         csr_file = os.path.join(user_config_dir, f"{user_id}.csr")
-         if os.path.exists(csr_file):
-                 os.remove(csr_file)
+                "req",
+                "-new",
+                "-newkey",
+                "rsa:2048",
+                "-nodes",
+                "-keyout",
+                key_file,
+                "-out",
+                f"{user_id}.csr",
+                "-subj",
+                f"/CN={user_id}",
+            ],
+            cwd=user_config_dir,
+            check=True,
+        )
+        subprocess.run(
+            [
+                "openssl",
+                "x509",
+                "-signkey",
+                ca_key_path,
+                "-in",
+                f"{user_id}.csr",
+                "-out",
+                cert_file,
+                "-days",
+                "3650",
+                "-batch"
+            ],
+            cwd=user_config_dir,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Error al generar certificados: {e}")
+    finally:
+        csr_file = os.path.join(user_config_dir, f"{user_id}.csr")
+        if os.path.exists(csr_file):
+            os.remove(csr_file)
 
-     with open(cert_file, 'r') as f:
-         cert_content = f.read()
-     with open(key_file, 'r') as f:
-         key_content = f.read()
+    with open(cert_file, 'r') as f:
+        cert_content = f.read()
+    with open(key_file, 'r') as f:
+        key_content = f.read()
 
-     return {"cert_content":cert_content, "key_content":key_content}
+    return {"cert_content": cert_content, "key_content": key_content}
 
 # Función para obtener la configuración del cliente OpenVPN
 async def get_client_config(room_id: str, user_id: str):
-# ruta del archivo de configuración en el servidor
     user_config_dir = os.path.join(OPEN_VPN_DIR, room_id, user_id)
     os.makedirs(user_config_dir, exist_ok=True)
     config_file = os.path.join(user_config_dir, "client.ovpn")
-    certs = generate_client_certs(room_id,user_id)
+    certs = generate_client_certs(room_id, user_id)
     with open(config_file, "w") as f:
         f.write(f"""
-    client
-    dev tun
-    proto udp
-    remote 18.119.122.250 1194 # Cambia por la IP publica de tu EC2
-    resolv-retry infinite
-    nobind
-    persist-key
-    persist-tun
-    ca ca.crt
-    remote-cert-tls server
-    comp-lzo
-    verb 3
-    <cert>
-    {certs["cert_content"]}
-    </cert>
-    <key>
-    {certs["key_content"]}
-    </key>
+client
+dev tun
+proto udp
+remote 18.119.122.250 1194
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+ca ca.crt
+remote-cert-tls server
+comp-lzo
+verb 3
+<cert>
+{certs["cert_content"]}
+</cert>
+<key>
+{certs["key_content"]}
+</key>
     """)
 
     with open(config_file, 'r') as f:
         config_content = f.read()
 
-    return {"ovpn_config":config_content}
-
+    return {"ovpn_config": config_content}
 
 # Ruta: Consultar salas activas
 @app.get("/rooms")
