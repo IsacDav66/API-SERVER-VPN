@@ -163,7 +163,7 @@ def generate_client_certs(room_id, user_id):
                     "-out",
                     f"{user_id}.csr", #  Se genera un .csr, pero lo borramos justo despues
                     "-subj",
-                    f"/CN={user_id}",
+                    f"/CN={user_id}/C=US", #  Añadimos el campo C (countryName) con valor US
                 ],
                 cwd = user_config_dir,
                 check=True,
@@ -174,7 +174,7 @@ def generate_client_certs(room_id, user_id):
                     "ca",
                     "-config",
                     conf_file_path,
-                     "-keyfile",
+                    "-keyfile",
                     ca_key_path,
                     "-cert",
                     ca_path,
@@ -184,7 +184,7 @@ def generate_client_certs(room_id, user_id):
                     cert_file,
                     "-days",
                     "3650",
-                    "-batch"
+                     "-batch" # para no tener que darle a "Y" todo el rato.
                 ],
                 cwd = user_config_dir,
                 check=True,
@@ -196,7 +196,6 @@ def generate_client_certs(room_id, user_id):
             csr_file = os.path.join(user_config_dir, f"{user_id}.csr")
             if os.path.exists(csr_file):
                     os.remove(csr_file)
-
 
         with open(cert_file, 'r') as f:
             cert_content = f.read()
