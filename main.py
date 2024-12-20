@@ -161,7 +161,7 @@ def generate_client_certs(room_id, user_id):
                     "-out",
                     f"{user_id}.csr", #  Se genera un .csr, pero lo borramos justo despues
                     "-subj",
-                    f"/CN={user_id}/C=US/ST=ExampleState", #  Añadimos el campo C (countryName) con valor US
+                    f"/CN={user_id}/C=US/ST=ExampleState/O=ExampleOrg", #  Añadimos el campo C (countryName) con valor US y ST (stateOrProvinceName) con valor ExampleState y O(organizationName)
                 ],
                 cwd = user_config_dir,
                 check=True,
