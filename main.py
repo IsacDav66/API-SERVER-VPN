@@ -161,7 +161,7 @@ def generate_client_certs(room_id, user_id):
                     "-out",
                     f"{user_id}.csr", #  Se genera un .csr, pero lo borramos justo despues
                     "-subj",
-                    f"/CN={user_id}/C=US", #  Añadimos el campo C (countryName) con valor US
+                    f"/CN={user_id}/C=US/ST=ExampleState", #  Añadimos el campo C (countryName) con valor US y ST (stateOrProvinceName) con valor ExampleState
                 ],
                 cwd = user_config_dir,
                 check=True,
@@ -170,6 +170,8 @@ def generate_client_certs(room_id, user_id):
                 [
                     "openssl",
                     "ca",
+                    "-config",
+                     "/usr/lib/ssl/openssl.cnf",
                     "-keyfile",
                     ca_key_path,
                     "-cert",
