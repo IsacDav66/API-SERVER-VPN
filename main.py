@@ -116,7 +116,7 @@ def create_virtual_network(room_id: str):
         subprocess.run([
           "cp",
           "ca.key",
-          os.path.join(OPEN_VPN_DIR,"demoCA/private/")
+          os.path.join(OPEN_VPN_DIR,"demoCA/private/ca.key")
           ], check = True)
        # Crea el archivo index.txt y serial si no existen
         if not os.path.exists(os.path.join(OPEN_VPN_DIR, "demoCA/index.txt")):
@@ -130,7 +130,7 @@ def create_virtual_network(room_id: str):
         subprocess.run([
           "cp",
           "ca.crt",
-          OPEN_VPN_DIR
+          os.path.join(OPEN_VPN_DIR, "ca.crt")
         ], check = True)
 
 
@@ -141,7 +141,8 @@ def create_virtual_network(room_id: str):
             f.write(rendered_config)
         
         # Iniciar OpenVPN en modo daemon
-        process = subprocess.Popen(["openvpn", "--config", config_file], 
+        process = subprocess.Popen(["openvpn", "--config", config_file],
+                                    cwd=config_dir, 
                                    stdout=subprocess.PIPE, 
                                    stderr=subprocess.PIPE, 
                                    text=True)
@@ -151,7 +152,7 @@ def create_virtual_network(room_id: str):
         logging.error(f"Error creating virtual network {room_id}: {e}")
         raise Exception(f"Error al crear la red virtual: {e}")
 
-# Ruta: Unirse a una salaa
+# Ruta: Unirse a una sala
 class JoinRoomRequest(BaseModel):
     room_id: str
     user_id: str
@@ -189,6 +190,7 @@ def generate_client_certs(room_id, user_id):
     #  Obtenemos la ruta del ca.crt
     ca_path = os.path.join(OPEN_VPN_DIR,"ca.crt")
     ca_key_path = os.path.join(OPEN_VPN_DIR,"demoCA/private/ca.key")
+    newcerts_path = os.path.join(OPEN_VPN_DIR,"demoCA/newcerts")
     try:
         # Ejecutar comandos OpenSSL para generar certificado y clave del cliente
         subprocess.run(
@@ -225,7 +227,10 @@ def generate_client_certs(room_id, user_id):
                 cert_file,
                 "-days",
                 "3650",
-                "-batch" # para no tener que darle a "Y" todo el rato.
+                "-batch", # para no tener que darle a "Y" todo el rato.
+                "-policy", "policy_anything",
+                "-extensions", "v3_ca",
+                 "-outdir", newcerts_path 
             ],
             cwd = user_config_dir,
             check=True,
@@ -328,36 +333,37 @@ async def test_vpn():
 
 
 def test_virtual_network():
-  try:
-    os.makedirs(OPEN_VPN_DIR, exist_ok=True)
-    config_dir = os.path.join(OPEN_VPN_DIR, "test-vpn")
-    os.makedirs(config_dir, exist_ok=True)
+    try:
+        os.makedirs(OPEN_VPN_DIR, exist_ok=True)
+        config_dir = os.path.join(OPEN_VPN_DIR, "test-vpn")
+        os.makedirs(config_dir, exist_ok=True)
 
-    config_file = os.path.join(config_dir, "server.conf")
+        config_file = os.path.join(config_dir, "server.conf")
 
-    dh_file = os.path.join(config_dir, "dh.pem")
-    subprocess.run([
-        "openssl",
-        "dhparam",
-        "-out",
-        dh_file,
-        "2048"
-    ], check = True)
+        dh_file = os.path.join(config_dir, "dh.pem")
+        subprocess.run([
+            "openssl",
+            "dhparam",
+            "-out",
+            dh_file,
+            "2048"
+        ], check = True)
 
-    server_template = template_env.get_template("test_server.conf.j2")
-    rendered_config = server_template.render(dh_file=dh_file, config_dir=config_dir)
-    with open(config_file, "w") as f:
-        f.write(rendered_config)
+        server_template = template_env.get_template("test_server.conf.j2")
+        rendered_config = server_template.render(dh_file=dh_file, config_dir=config_dir)
+        with open(config_file, "w") as f:
+            f.write(rendered_config)
+        
+        # Iniciar OpenVPN en modo daemon
+        process = subprocess.Popen(["openvpn", "--config", config_file],
+                                    cwd=config_dir, 
+                                   stdout=subprocess.PIPE, 
+                                   stderr=subprocess.PIPE, 
+                                   text=True)
+        rooms["test-vpn"] = {
+            "process": process
+        }
     
-    # Iniciar OpenVPN en modo daemon
-    process = subprocess.Popen(["openvpn", "--config", config_file], 
-                            stdout=subprocess.PIPE, 
-                            stderr=subprocess.PIPE, 
-                            text=True)
-    rooms["test-vpn"] = {
-        "process": process
-    }
-
-  except Exception as e:
-      logging.error(f"Error creating test virtual network: {e}")
-      raise Exception(f"Error al crear la red virtual de prueba: {e}")
+    except Exception as e:
+        logging.error(f"Error creating test virtual network: {e}")
+        raise Exception(f"Error al crear la red virtual de prueba: {e}")
