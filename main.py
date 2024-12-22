@@ -328,36 +328,37 @@ async def test_vpn():
 
 
 def test_virtual_network():
-  try:
-    os.makedirs(OPEN_VPN_DIR, exist_ok=True)
-    config_dir = os.path.join(OPEN_VPN_DIR, "test-vpn")
-    os.makedirs(config_dir, exist_ok=True)
+    try:
+        os.makedirs(OPEN_VPN_DIR, exist_ok=True)
+        config_dir = os.path.join(OPEN_VPN_DIR, "test-vpn")
+        os.makedirs(config_dir, exist_ok=True)
 
-    config_file = os.path.join(config_dir, "server.conf")
+        config_file = os.path.join(config_dir, "server.conf")
 
-    dh_file = os.path.join(config_dir, "dh.pem")
-    subprocess.run([
-        "openssl",
-        "dhparam",
-        "-out",
-        dh_file,
-        "2048"
-    ], check = True)
+        dh_file = os.path.join(config_dir, "dh.pem")
+        subprocess.run([
+            "openssl",
+            "dhparam",
+            "-out",
+            dh_file,
+            "2048"
+        ], check = True)
 
-    server_template = template_env.get_template("test_server.conf.j2")
-    rendered_config = server_template.render(dh_file=dh_file, config_dir=config_dir)
-    with open(config_file, "w") as f:
-        f.write(rendered_config)
+        server_template = template_env.get_template("test_server.conf.j2")
+        rendered_config = server_template.render(dh_file=dh_file, config_dir=config_dir)
+        with open(config_file, "w") as f:
+            f.write(rendered_config)
+        
+        # Iniciar OpenVPN en modo daemon
+        process = subprocess.Popen(["openvpn", "--config", config_file],
+                                    cwd=config_dir, 
+                                   stdout=subprocess.PIPE, 
+                                   stderr=subprocess.PIPE, 
+                                   text=True)
+        rooms["test-vpn"] = {
+            "process": process
+        }
     
-    # Iniciar OpenVPN en modo daemon
-    process = subprocess.Popen(["openvpn", "--config", config_file], 
-                            stdout=subprocess.PIPE, 
-                            stderr=subprocess.PIPE, 
-                            text=True)
-    rooms["test-vpn"] = {
-        "process": process
-    }
-
-  except Exception as e:
-      logging.error(f"Error creating test virtual network: {e}")
-      raise Exception(f"Error al crear la red virtual de prueba: {e}")
+    except Exception as e:
+        logging.error(f"Error creating test virtual network: {e}")
+        raise Exception(f"Error al crear la red virtual de prueba: {e}")
