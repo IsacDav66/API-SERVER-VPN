@@ -136,7 +136,7 @@ def create_virtual_network(room_id: str):
 
 
         server_template = template_env.get_template("server.conf.j2")
-        rendered_config = server_template.render(dh_file=dh_file)
+        rendered_config = server_template.render(dh_file=dh_file, config_dir=config_dir)
         with open(config_file, "w") as f:
             f.write(rendered_config)
         
@@ -345,7 +345,7 @@ def test_virtual_network():
     ], check = True)
 
     server_template = template_env.get_template("test_server.conf.j2")
-    rendered_config = server_template.render(dh_file=dh_file)
+    rendered_config = server_template.render(dh_file=dh_file, config_dir=config_dir)
     with open(config_file, "w") as f:
         f.write(rendered_config)
     
