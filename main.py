@@ -111,6 +111,30 @@ def create_virtual_network(room_id: str):
             "2048"
         ], check = True)
 
+        # Crea la carpeta demoCA si no existe y copia la clave del CA
+        os.makedirs(os.path.join(OPEN_VPN_DIR,"demoCA/private"), exist_ok=True)
+        subprocess.run([
+          "cp",
+          "ca.key",
+          os.path.join(OPEN_VPN_DIR,"demoCA/private/")
+          ], check = True)
+       # Crea el archivo index.txt y serial si no existen
+        if not os.path.exists(os.path.join(OPEN_VPN_DIR, "demoCA/index.txt")):
+            with open(os.path.join(OPEN_VPN_DIR, "demoCA/index.txt"), 'w') as f:
+                f.write("")
+        if not os.path.exists(os.path.join(OPEN_VPN_DIR, "demoCA/serial")):
+            with open(os.path.join(OPEN_VPN_DIR, "demoCA/serial"), 'w') as f:
+                f.write("01")
+
+        # Copia el certificado ca.crt a /tmp/openvpn_rooms/
+        subprocess.run([
+          "cp",
+          "ca.crt",
+          OPEN_VPN_DIR
+        ], check = True)
+
+
+
         server_template = template_env.get_template("server.conf.j2")
         rendered_config = server_template.render(dh_file=dh_file)
         with open(config_file, "w") as f:
