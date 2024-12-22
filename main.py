@@ -164,7 +164,7 @@ def generate_client_certs(room_id, user_id):
     key_file = os.path.join(user_config_dir, f"{user_id}-key.key")
     #  Obtenemos la ruta del ca.crt
     ca_path = os.path.join(OPEN_VPN_DIR,"ca.crt")
-    ca_key_path = os.path.join(OPEN_VPN_DIR,"./demoCA/private/cakey.pem")
+    ca_key_path = os.path.join(OPEN_VPN_DIR,"demoCA/private/ca.key")
     try:
         # Ejecutar comandos OpenSSL para generar certificado y clave del cliente
         subprocess.run(
