@@ -127,7 +127,7 @@ def create_virtual_network(room_id: str):
         logging.error(f"Error creating virtual network {room_id}: {e}")
         raise Exception(f"Error al crear la red virtual: {e}")
 
-# Ruta: Unirse a una sala
+# Ruta: Unirse a una salaa
 class JoinRoomRequest(BaseModel):
     room_id: str
     user_id: str
