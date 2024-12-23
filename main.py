@@ -355,9 +355,8 @@ def test_virtual_network():
             f.write(rendered_config)
         
         # Iniciar OpenVPN en modo daemon
-        process = subprocess.Popen(["openvpn", "--config", config_file],
-                                    cwd=config_dir, 
-                                   stdout=subprocess.PIPE, 
+        process = subprocess.Popen(["openvpn", "--config", config_file, "--log",  os.path.join(config_dir,"server.log")],
+                                    stdout=subprocess.PIPE, 
                                    stderr=subprocess.PIPE, 
                                    text=True)
         rooms["test-vpn"] = {
@@ -367,4 +366,3 @@ def test_virtual_network():
     except Exception as e:
         logging.error(f"Error creating test virtual network: {e}")
         raise Exception(f"Error al crear la red virtual de prueba: {e}")
-    
